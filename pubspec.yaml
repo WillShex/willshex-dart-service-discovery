@@ -1,0 +1,12 @@
+name: willshex_dart_service_discovery
+description: A generic service discovery package.
+version: 0.0.1
+environment:
+  sdk: ^3.0.0
+
+dependencies:
+
+dev_dependencies:
+  test: ^1.16.0
+  mockito: ^5.4.0
+  build_runner: ^2.3.0
