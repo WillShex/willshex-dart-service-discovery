@@ -1,4 +1,4 @@
-import 'package:meta/meta.dart';
+import "package:meta/meta.dart";
 
 /// A base class for services that require initialization.
 ///
@@ -42,7 +42,7 @@ abstract class Service {
   void verifyInitialized() {
     if (!_isInitialized) {
       throw StateError(
-          'Service $runtimeType is not initialized. Call init() first.');
+          "Service $runtimeType is not initialized. Call init() first.");
     }
   }
 

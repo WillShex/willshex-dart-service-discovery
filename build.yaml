@@ -1,0 +1,14 @@
+targets:
+  $default:
+    builders:
+      willshex_dart_service_discovery|discovery_generator:
+        enabled: true
+
+builders:
+  discovery_generator:
+    import: "package:willshex_dart_service_discovery/src/generator/builder.dart"
+    builder_factories: ["discoveryBuilder"]
+    build_extensions: {".dart": [".svc.dart"]}
+    auto_apply: dependents
+    build_to: source
+    applies_builders: ["source_gen:combining_builder"]

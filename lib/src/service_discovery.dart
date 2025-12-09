@@ -1,13 +1,11 @@
-import 'dart:collection';
+import "package:meta/meta.dart";
 
-import 'package:meta/meta.dart';
-
-import 'service.dart';
+import "service.dart";
 
 /// A generic service discovery registry.
 class ServiceDiscovery {
   // Use LinkedHashMap to preserve insertion order for initialization
-  final Map<Object, Service> _services = LinkedHashMap<Object, Service>();
+  final Map<Object, Service> _services = <Object, Service>{};
 
   static ServiceDiscovery? _instance;
   static ServiceDiscovery get instance => _instance ??= ServiceDiscovery._();
@@ -16,50 +14,43 @@ class ServiceDiscovery {
 
   /// Register a service instance.
   ///
-  /// If [name] is provided, it is used as the key.
-  /// Otherwise, the type [T] is used.
+  /// The type [T] is used as the key.
   ///
-  /// If a service with the same key is already registered, it acts as an upsert/overwrite.
-  void register<T extends Service>(T service, {String? name}) {
-    final key = name ?? T;
-    _services[key] = service;
+  /// If a service with the same type is already registered, it acts as an upsert/overwrite.
+  void register<T extends Service>(T service) {
+    _services[T] = service;
   }
 
   /// Resolve a registered service.
   ///
-  /// If [name] is provided, looks up by name.
-  /// Otherwise, looks up by type [T].
+  /// Looks up by type [T].
   ///
   /// Throws [Exception] if service is not found or if the found service is not of type [T].
-  T resolve<T extends Service>({String? name}) {
-    final key = name ?? T;
+  T resolve<T extends Service>() {
+    final key = T;
     final service = _services[key];
     if (service == null) {
-      throw Exception('Service not registered for key: $key');
+      throw Exception("Service not registered for type: $T");
     }
     if (service is! T) {
       throw Exception(
-          'Service registered for key: $key is not of type $T (found ${service.runtimeType})');
+          "Service registered for type: $T is not of type $T (found ${service.runtimeType})");
     }
     return service;
   }
 
   /// Checks if a service is registered.
   ///
-  /// If [name] is provided, checks by name.
-  /// Otherwise, checks by type [T].
-  bool isRegistered<T extends Service>({String? name}) {
-    final key = name ?? T;
-    return _services.containsKey(key);
+  /// Checks by type [T].
+  bool isRegistered<T extends Service>() {
+    return _services.containsKey(T);
   }
 
   /// Unregisters a service.
   ///
-  /// If [name] is provided, unregisters by name.
-  /// Otherwise, unregisters by type [T].
-  void unregister<T extends Service>({String? name}) {
-    final key = name ?? T;
-    _services.remove(key);
+  /// Unregisters by type [T].
+  void unregister<T extends Service>() {
+    _services.remove(T);
   }
 
   /// Reset all registered services.
