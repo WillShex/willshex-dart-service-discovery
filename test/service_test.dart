@@ -1,7 +1,7 @@
 import "package:test/test.dart";
 import "package:willshex_dart_service_discovery/willshex_dart_service_discovery.dart";
 
-class TestService extends Service {
+class TestService extends BasicService {
   bool onInitCalled = false;
   bool onResetCalled = false;
 
