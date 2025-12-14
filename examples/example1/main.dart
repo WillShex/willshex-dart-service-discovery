@@ -1,11 +1,14 @@
 import "package:willshex_dart_service_discovery/willshex_dart_service_discovery.dart";
+
 import "services/another_example_service.dart";
 import "services/example_service.dart";
 
 part "main.svc.dart";
 
-@ConfigureDiscovery()
+@ConfigureDiscovery(provider: "Provider", registrar: "Registrar")
 void main(List<String> args) async {
-  await $configureDiscovery();
+  await Registrar.init();
   print("Service Discovery Configured and Initialized");
+
+  print(Provider.exampleService);
 }

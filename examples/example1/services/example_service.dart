@@ -1,15 +1,13 @@
 import "package:willshex_dart_service_discovery/willshex_dart_service_discovery.dart";
 
-part "another_example_service.svc.dart";
-
-class AnotherExampleService extends BasicService {
+class ExampleService extends BasicService {
   @override
   Future<void> onInit() async {
-    print("AnotherExampleService initialized");
+    print("ExampleService initialized");
   }
 
   @override
   Future<void> onReset() async {
-    print("AnotherExampleService reset");
+    print("ExampleService reset");
   }
 }

@@ -1,5 +1,10 @@
 targets:
   $default:
+    sources:
+      - lib/**
+      - example/**
+      - examples/**
+      - test/**
     builders:
       willshex_dart_service_discovery|discovery_generator:
         enabled: true
