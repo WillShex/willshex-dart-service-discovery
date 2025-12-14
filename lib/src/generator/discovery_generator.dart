@@ -6,6 +6,7 @@ import "package:build/build.dart";
 
 import "package:source_gen/source_gen.dart";
 import "package:willshex_dart_service_discovery/src/annotations/configure_discovery.dart";
+import "package:glob/glob.dart";
 import "package:willshex_dart_service_discovery/src/annotations/depends_on.dart";
 
 /// Generates the configuration method to register all services.
@@ -97,46 +98,38 @@ class DiscoveryConfigGenerator
       BuildStep buildStep, Element annotatedElement) async {
     final definitions = <InterfaceType, List<ClassElement>>{};
 
-    // Crawl imports starting from the annotated library
-    final rootLibrary = annotatedElement.library;
-    if (rootLibrary == null) return definitions;
+    // Scan all dart files in the package (lib, examples, etc.)
+    // We restrict to the current package to avoid scanning dependencies
+    final package = buildStep.inputId.package;
+    final glob = Glob("**/*.dart");
 
-    final visited = <LibraryElement>{};
-    final queue = <LibraryElement>[rootLibrary];
+    await for (final assetId in buildStep.findAssets(glob)) {
+      // Only process files in the same package
+      if (assetId.package != package) continue;
 
-    // We also need to explicitly scan 'lib' of the package because users might rely on
-    // services being picked up from the package without explicit import in main?
-    // User request: "confining itself to the annotated main function".
-    // This implies explicit imports ONLY.
-    // However, if we do strict import crawling, we might miss things if the user expects
-    // "everything in my project" but "confined to my project".
-    // But "confined to annotated main" strongly suggests reachability.
-
-    while (queue.isNotEmpty) {
-      final current = queue.removeAt(0);
-      if (!visited.add(current)) continue;
-      // Process classes in this library
-      for (final cls in current.topLevelElements.whereType<ClassElement>()) {
-        if (cls.isAbstract) continue;
-
-        if (_inheritsFromService(cls)) {
-          final interfaces = _findServiceInterfaces(cls);
-          for (final interface in interfaces) {
-            definitions.putIfAbsent(interface, () => []).add(cls);
-          }
-        }
+      // Skip generated files
+      if (assetId.path.endsWith(".g.dart") ||
+          assetId.path.endsWith(".svc.dart") ||
+          assetId.path.endsWith(".freezed.dart")) {
+        continue;
       }
 
-      // Add imported libraries to queue (filtered)
-      for (final lib in [
-        ...current.importedLibraries,
-        ...current.exportedLibraries
-      ]) {
-        final uri = lib.source.uri.toString();
-        if (uri.startsWith("dart:") || uri.startsWith("package:flutter")) {
-          continue;
+      try {
+        final library = await buildStep.resolver.libraryFor(assetId);
+
+        for (final cls in library.topLevelElements.whereType<ClassElement>()) {
+          if (cls.isAbstract) continue;
+
+          if (_inheritsFromService(cls)) {
+            final interfaces = _findServiceInterfaces(cls);
+            for (final interface in interfaces) {
+              definitions.putIfAbsent(interface, () => []).add(cls);
+            }
+          }
         }
-        queue.add(lib);
+      } catch (e) {
+        // Ignore files that fail to resolve (e.g. part files without parent)
+        continue;
       }
     }
 
