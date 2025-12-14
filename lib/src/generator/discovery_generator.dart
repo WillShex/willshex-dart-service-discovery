@@ -6,6 +6,7 @@ import "package:build/build.dart";
 
 import "package:source_gen/source_gen.dart";
 import "package:willshex_dart_service_discovery/src/annotations/configure_discovery.dart";
+import "package:willshex_dart_service_discovery/src/annotations/depends_on.dart";
 
 /// Generates the configuration method to register all services.
 class DiscoveryConfigGenerator
@@ -114,10 +115,10 @@ class DiscoveryConfigGenerator
     while (queue.isNotEmpty) {
       final current = queue.removeAt(0);
       if (!visited.add(current)) continue;
-
       // Process classes in this library
       for (final cls in current.topLevelElements.whereType<ClassElement>()) {
         if (cls.isAbstract) continue;
+
         if (_inheritsFromService(cls)) {
           final interfaces = _findServiceInterfaces(cls);
           for (final interface in interfaces) {
@@ -126,9 +127,17 @@ class DiscoveryConfigGenerator
         }
       }
 
-      // Enqueue imports and exports
-      queue.addAll(current.importedLibraries);
-      queue.addAll(current.exportedLibraries);
+      // Add imported libraries to queue (filtered)
+      for (final lib in [
+        ...current.importedLibraries,
+        ...current.exportedLibraries
+      ]) {
+        final uri = lib.source.uri.toString();
+        if (uri.startsWith("dart:") || uri.startsWith("package:flutter")) {
+          continue;
+        }
+        queue.add(lib);
+      }
     }
 
     return definitions;
@@ -300,33 +309,173 @@ class DiscoveryConfigGenerator
       StringBuffer buffer,
       Map<InterfaceType, List<ClassElement>> services,
       List<ClassElement> explicitConcreteTypes) {
+    // 1. Build list of all "registration units"
+    // A unit is either:
+    // - A singleton implementation of an interface (Interface -> [Impl])
+    // - An ambiguous interface requiring injection (Interface) -> treated as a node, but has no distinct class?
+    //   Actually, injected services are passed in, so they are PRE-initialized. Their registration order matters less
+    //   for THEIR init, but matters for services DEPENDING on them.
+    // - An explicit concrete type (Impl)
+
+    // We need to map: Type -> ClassElement (implementation) to check dependencies.
+    // For ambiguous interfaces (provided via init param), the "implementation" is external.
+    // However, if ServiceA depends on AbstractService, it expects AbstractService to be registered.
+
+    // Key: The Type being registered (Interface or Concrete)
+    // Value: The ClassElement representing the implementation (if known) or the InterfaceElement (if ambiguous/injected)
+    final registrationNodes = <InterfaceType, Element>{};
+
+    // Map of Dependency -> Dependents (Adjacency List)? Or Node -> Dependencies?
+    // We want Topological Sort: register dependencies first.
+    // Graph: Node -> List<Node> (Dependencies)
+
+    // Populate Nodes
     final sortedInterfaces = services.keys.toList()
       ..sort((a, b) => a.element.name.compareTo(b.element.name));
 
+    final ambiguousInterfaces = <InterfaceType>{};
+
     for (final interface in sortedInterfaces) {
       final implementations = services[interface]!;
-
       if (implementations.length == 1) {
-        // Auto-register singleton
-        final impl = implementations.first;
-        buffer.writeln(
-            "  ServiceDiscovery.instance.register<${interface.element.name}>(${impl.name}());");
+        // Singleton
+        registrationNodes[interface] = implementations.first;
       } else {
-        // Ambiguous: registered via injected parameter
-        final paramName = _toCamelCase(interface.element.name);
-        buffer.writeln(
-            "  ServiceDiscovery.instance.register<${interface.element.name}>($paramName);");
+        // Ambiguous - Injected
+        ambiguousInterfaces.add(interface);
+        // For dependency resolution, we treat the Interface element as the "node"
+        // because that's what others depend on.
+        registrationNodes[interface] = interface.element;
       }
     }
 
-    // Register explicit concrete types
-    final sortedExplicit = explicitConcreteTypes.toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
-
-    for (final concrete in sortedExplicit) {
-      buffer.writeln(
-          "  ServiceDiscovery.instance.register<${concrete.name}>(${concrete.name}());");
+    for (final concrete in explicitConcreteTypes) {
+      // Explicit Concrete is its own interface
+      registrationNodes[concrete.thisType] = concrete;
     }
+
+    // 2. Build Graph
+    // Node is InterfaceType (the type used in register<T>).
+    // Dependencies are other InterfaceTypes.
+    final dependencies = <InterfaceType, Set<InterfaceType>>{};
+
+    for (final entry in registrationNodes.entries) {
+      final nodeType = entry.key; // The registered type (e.g. MyService)
+      final element = entry
+          .value; // The class implementing it (e.g. MyServiceImpl) OR InterfaceElement
+
+      dependencies[nodeType] = {};
+
+      if (element is ClassElement) {
+        // Read @DependsOn from the implementation class
+        final deps = _getDependencies(element);
+        for (final depType in deps) {
+          // Find which registered node corresponds to this dependency type
+          // The dependency `depType` might be a Concrete or an Interface.
+          // We need to find if `depType` is a key in `registrationNodes`.
+          // Note: Type equality can be tricky. compare element names?
+
+          // Simple lookup:
+          // 1. Is depType directly a registered interface?
+          // 2. Is depType a supertype of a registered concrete? (Not supported yet, usually depends on Interface)
+
+          final match = registrationNodes.keys.firstWhere(
+              (k) =>
+                  k.element.name == depType.element.name &&
+                  k.element.library.source.uri ==
+                      depType.element.library.source.uri,
+              orElse: () => nodeType // Dummy, handled below
+              );
+
+          if (match != nodeType) {
+            dependencies[nodeType]!.add(match);
+          }
+        }
+      }
+    }
+
+    // 3. Topological Sort
+    List<InterfaceType> sortedNodes;
+    try {
+      sortedNodes = _topologicalSort(registrationNodes.keys, dependencies);
+    } catch (e) {
+      // Propagate error (likely Circular Dependency)
+      throw InvalidGenerationSourceError(e.toString());
+    }
+
+    // 4. Generate Registry Calls
+    for (final node in sortedNodes) {
+      if (ambiguousInterfaces.contains(node)) {
+        // Ambiguous
+        final paramName = _toCamelCase(node.element.name);
+        buffer.writeln(
+            "  ServiceDiscovery.instance.register<${node.element.name}>($paramName);");
+      } else {
+        // Singleton or Explicit
+        // Only generate if NOT ambiguous (checked above) AND inside services map OR explicit list
+        // logic: if it's in registrationNodes, it's one of them.
+        // We need to know if it's a "singleton" (ClassName()) or Explicit (ClassName())
+
+        final element = registrationNodes[node]!;
+        if (element is ClassElement) {
+          buffer.writeln(
+              "  ServiceDiscovery.instance.register<${node.element.name}>(${element.name}());");
+        }
+      }
+    }
+  }
+
+  Set<InterfaceType> _getDependencies(ClassElement cls) {
+    final deps = <InterfaceType>[];
+    const typeChecker = TypeChecker.fromRuntime(DependsOn);
+
+    final annotation = typeChecker.firstAnnotationOf(cls);
+    if (annotation != null) {
+      final reader = ConstantReader(annotation);
+      final list = reader.peek("dependencies")?.listValue;
+      if (list != null) {
+        for (final item in list) {
+          final type = item.toTypeValue();
+          if (type is InterfaceType) {
+            deps.add(type);
+          }
+        }
+      }
+    }
+    return deps.toSet();
+  }
+
+  List<InterfaceType> _topologicalSort(Iterable<InterfaceType> nodes,
+      Map<InterfaceType, Set<InterfaceType>> dependencies) {
+    final sorted = <InterfaceType>[];
+    final visited = <InterfaceType>{};
+    final visiting = <InterfaceType>{};
+
+    void visit(InterfaceType node) {
+      if (visiting.contains(node)) {
+        throw "Circular dependency detected involving ${node.element.name}";
+      }
+      if (visited.contains(node)) {
+        return;
+      }
+
+      visiting.add(node);
+
+      final deps = dependencies[node] ?? {};
+      for (final dep in deps) {
+        visit(dep);
+      }
+
+      visiting.remove(node);
+      visited.add(node);
+      sorted.add(node);
+    }
+
+    for (final node in nodes) {
+      visit(node);
+    }
+
+    return sorted;
   }
 
   bool _inheritsFromService(ClassElement? cls) {

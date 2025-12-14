@@ -1,7 +1,7 @@
 import "dart:async";
 
 import "package:meta/meta.dart";
-import "package:willshex_dart_service_discovery/willshex_dart_service_discovery.dart";
+import "service.dart";
 
 abstract class BasicService extends Service {
   bool _isInitialized = false;
