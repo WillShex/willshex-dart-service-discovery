@@ -8,4 +8,5 @@ part of "example_service.dart";
 
 class ExampleServiceProvider extends ServiceProvider<ExampleService> {
   const ExampleServiceProvider();
+  static const instance = ExampleServiceProvider();
 }

@@ -74,6 +74,7 @@ class ServiceProviderGenerator extends Generator {
         buffer
             .writeln("class ${name}Provider extends ServiceProvider<$name> {");
         buffer.writeln("  const ${name}Provider();");
+        buffer.writeln("  static const instance = ${name}Provider();");
         buffer.writeln("}");
         buffer.writeln();
       }

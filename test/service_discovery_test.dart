@@ -68,6 +68,9 @@ void main() {
 
       final progressTypes = <String>[];
 
+      when(service1.init()).thenReturn(null);
+      when(service2.init()).thenReturn(null);
+
       await ServiceDiscovery.instance.init(
         onProgress: (service, key) {
           progressTypes.add(key);
@@ -96,6 +99,7 @@ void main() {
     test("should reset all services", () async {
       ServiceDiscovery.instance.register<MockService>(mockService);
 
+      when(mockService.reset()).thenReturn(null);
       await ServiceDiscovery.instance.reset();
 
       verify(mockService.reset()).called(1);

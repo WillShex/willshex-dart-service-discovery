@@ -9,4 +9,5 @@ part of "another_example_service.dart";
 class AnotherExampleServiceProvider
     extends ServiceProvider<AnotherExampleService> {
   const AnotherExampleServiceProvider();
+  static const instance = AnotherExampleServiceProvider();
 }
