@@ -7,6 +7,7 @@ part of "main.dart";
 // **************************************************************************
 
 class Registrar {
+  Registrar._();
   static Future<void> init({
     required AbstractService abstractService,
   }) async {
@@ -16,6 +17,7 @@ class Registrar {
 }
 
 class Provider {
+  Provider._();
   static AbstractService get abstractService =>
       ServiceDiscovery.instance.resolve<AbstractService>();
 }

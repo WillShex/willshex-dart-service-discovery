@@ -114,6 +114,26 @@ class DiscoveryConfigGenerator
         continue;
       }
 
+      // Filter based on scope
+      // If we are generating for an example, we only want to scan lib/ and that example
+      final inputPath = buildStep.inputId.path;
+      if (inputPath.startsWith("examples/")) {
+        final pathSegments = inputPath.split("/");
+        if (pathSegments.length >= 2) {
+          final exampleRoot = "${pathSegments[0]}/${pathSegments[1]}";
+          if (!assetId.path.startsWith("lib/") &&
+              !assetId.path.startsWith(exampleRoot)) {
+            continue;
+          }
+        }
+      } else {
+        // If generating for lib/ (or test/), generally only scan lib/
+        // (Adjust if necessary for test support)
+        if (!assetId.path.startsWith("lib/")) {
+          continue;
+        }
+      }
+
       try {
         final library = await buildStep.resolver.libraryFor(assetId);
 
@@ -193,6 +213,7 @@ class DiscoveryConfigGenerator
       Map<InterfaceType, List<ClassElement>> services,
       List<ClassElement> explicitConcreteTypes) {
     buffer.writeln("class $className {");
+    buffer.writeln("  $className._();");
     _generateInitBody(buffer, services, explicitConcreteTypes);
     _generateGettersBody(buffer, services, explicitConcreteTypes);
     buffer.writeln("}");
@@ -204,6 +225,7 @@ class DiscoveryConfigGenerator
       Map<InterfaceType, List<ClassElement>> services,
       List<ClassElement> explicitConcreteTypes) {
     buffer.writeln("class $className {");
+    buffer.writeln("  $className._();");
     _generateInitBody(buffer, services, explicitConcreteTypes);
     buffer.writeln("}");
   }
@@ -214,6 +236,7 @@ class DiscoveryConfigGenerator
       Map<InterfaceType, List<ClassElement>> services,
       List<ClassElement> explicitConcreteTypes) {
     buffer.writeln("class $className {");
+    buffer.writeln("  $className._();");
     _generateGettersBody(buffer, services, explicitConcreteTypes);
     buffer.writeln("}");
   }

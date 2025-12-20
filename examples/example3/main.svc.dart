@@ -7,6 +7,7 @@ part of "main.dart";
 // **************************************************************************
 
 class Registrar {
+  Registrar._();
   static Future<void> init() async {
     ServiceDiscovery.instance.register<ImplementationA>(ImplementationA());
     ServiceDiscovery.instance.register<ImplementationB>(ImplementationB());
@@ -15,6 +16,7 @@ class Registrar {
 }
 
 class Provider {
+  Provider._();
   static ImplementationA get implementationA =>
       ServiceDiscovery.instance.resolve<ImplementationA>();
   static ImplementationB get implementationB =>
