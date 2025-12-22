@@ -7,7 +7,6 @@ import "package:build/build.dart";
 import "package:source_gen/source_gen.dart";
 import "package:willshex_dart_service_discovery/src/annotations/configure_discovery.dart";
 import "package:glob/glob.dart";
-import "package:willshex_dart_service_discovery/src/annotations/depends_on.dart";
 
 /// Generates the configuration method to register all services.
 class DiscoveryConfigGenerator
@@ -60,7 +59,7 @@ class DiscoveryConfigGenerator
     // 3. Generate Code
     final buffer = StringBuffer();
 
-    if (element is FunctionElement) {
+    if (element is ExecutableElement) {
       if (providerName != null &&
           registrarName != null &&
           providerName == registrarName) {
@@ -137,9 +136,7 @@ class DiscoveryConfigGenerator
       try {
         final library = await buildStep.resolver.libraryFor(assetId);
 
-        for (final cls in library.topLevelElements.whereType<ClassElement>()) {
-          if (cls.isAbstract) continue;
-
+        for (final cls in library.classes) {
           if (_inheritsFromService(cls)) {
             final interfaces = _findServiceInterfaces(cls);
             for (final interface in interfaces) {
@@ -267,10 +264,10 @@ class DiscoveryConfigGenerator
     // Add them as named parameters
     if (ambiguousInterfaces.isNotEmpty) {
       buffer.write("{");
-      ambiguousInterfaces
-          .sort((a, b) => a.element.name.compareTo(b.element.name));
+      ambiguousInterfaces.sort(
+          (a, b) => (a.element.name ?? "").compareTo(b.element.name ?? ""));
       for (final interface in ambiguousInterfaces) {
-        final paramName = _toCamelCase(interface.element.name);
+        final paramName = _toCamelCase(interface.element.name!);
         buffer.write("required ${interface.element.name} $paramName, ");
       }
       buffer.write("}");
@@ -286,27 +283,27 @@ class DiscoveryConfigGenerator
     // Add explicit concrete types as if they are interfaces (they are their own interface)
     final explicitMap = <String, ClassElement>{};
     for (final concrete in explicitConcreteTypes) {
-      explicitMap[concrete.name] = concrete;
+      explicitMap[concrete.name!] = concrete;
     }
 
     final sortedInterfaces = allInterfaces.toList()
-      ..sort((a, b) => a.element.name.compareTo(b.element.name));
+      ..sort((a, b) => (a.element.name ?? "").compareTo(b.element.name ?? ""));
 
     final sortedExplicit = explicitMap.values.toList()
-      ..sort((a, b) => a.name.compareTo(b.name));
+      ..sort((a, b) => (a.name ?? "").compareTo(b.name ?? ""));
 
     // Desired: Getters for all interfaces (auto-discovered)
     for (final interface in sortedInterfaces) {
-      final instanceName = _toCamelCase(interface.element.name);
+      final instanceName = _toCamelCase(interface.element.name!);
       buffer.writeln(
-          "  static ${interface.element.name} get $instanceName => ServiceDiscovery.instance.resolve<${interface.element.name}>();");
+          "  static ${interface.element.name!} get $instanceName => ServiceDiscovery.instance.resolve<${interface.element.name!}>();");
     }
 
     // AND Getters for explicit concrete types
     for (final concrete in sortedExplicit) {
-      final instanceName = _toCamelCase(concrete.name);
+      final instanceName = _toCamelCase(concrete.name!);
       buffer.writeln(
-          "  static ${concrete.name} get $instanceName => ServiceDiscovery.instance.resolve<${concrete.name}>();");
+          "  static ${concrete.name!} get $instanceName => ServiceDiscovery.instance.resolve<${concrete.name!}>();");
     }
   }
 
@@ -347,7 +344,7 @@ class DiscoveryConfigGenerator
 
     // Populate Nodes
     final sortedInterfaces = services.keys.toList()
-      ..sort((a, b) => a.element.name.compareTo(b.element.name));
+      ..sort((a, b) => (a.element.name ?? "").compareTo(b.element.name ?? ""));
 
     final ambiguousInterfaces = <InterfaceType>{};
 
@@ -398,8 +395,8 @@ class DiscoveryConfigGenerator
           final match = registrationNodes.keys.firstWhere(
               (k) =>
                   k.element.name == depType.element.name &&
-                  k.element.library.source.uri ==
-                      depType.element.library.source.uri,
+                  k.element.library.identifier ==
+                      depType.element.library.identifier,
               orElse: () => nodeType // Dummy, handled below
               );
 
@@ -423,9 +420,9 @@ class DiscoveryConfigGenerator
     for (final node in sortedNodes) {
       if (ambiguousInterfaces.contains(node)) {
         // Ambiguous
-        final paramName = _toCamelCase(node.element.name);
+        final paramName = _toCamelCase(node.element.name!);
         buffer.writeln(
-            "  ServiceDiscovery.instance.register<${node.element.name}>($paramName);");
+            "  ServiceDiscovery.instance.register<${node.element.name!}>($paramName);");
       } else {
         // Singleton or Explicit
         // Only generate if NOT ambiguous (checked above) AND inside services map OR explicit list
@@ -435,7 +432,7 @@ class DiscoveryConfigGenerator
         final element = registrationNodes[node]!;
         if (element is ClassElement) {
           buffer.writeln(
-              "  ServiceDiscovery.instance.register<${node.element.name}>(${element.name}());");
+              "  ServiceDiscovery.instance.register<${node.element.name!}>(${element.name}());");
         }
       }
     }
@@ -443,7 +440,8 @@ class DiscoveryConfigGenerator
 
   Set<InterfaceType> _getDependencies(ClassElement cls) {
     final deps = <InterfaceType>[];
-    const typeChecker = TypeChecker.fromRuntime(DependsOn);
+    final typeChecker = TypeChecker.fromUrl(
+        "package:willshex_dart_service_discovery/src/annotations/depends_on.dart#DependsOn");
 
     final annotation = typeChecker.firstAnnotationOf(cls);
     if (annotation != null) {
@@ -505,8 +503,7 @@ class DiscoveryConfigGenerator
   }
 
   bool _isServiceLibrary(Element element) {
-    return element.library?.source.uri
-            .toString()
+    return element.library?.identifier
             .contains("willshex_dart_service_discovery") ??
         false;
   }
