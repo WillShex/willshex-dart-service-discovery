@@ -1,11 +1,15 @@
 import "dart:async";
+import "dart:io";
+import "dart:isolate";
 
 import "package:analyzer/dart/element/element.dart";
+import "package:analyzer/dart/element/type.dart";
 import "package:build/build.dart";
+import "package:glob/glob.dart";
+import "package:package_config/package_config.dart";
 import "package:source_gen/source_gen.dart";
 import "package:willshex_dart_service_discovery/src/annotations/configure_discovery.dart";
-import "package:glob/glob.dart";
-import "package:analyzer/dart/element/type.dart";
+import "package:yaml/yaml.dart";
 
 /// Generates provider methods for classes annotated with @Discovery.
 ///
@@ -62,56 +66,151 @@ class DiscoveryProviderGenerator extends GeneratorForAnnotation<Discovery> {
   Future<Map<InterfaceType, List<ClassElement>>> _scanForServices(
       BuildStep buildStep) async {
     final definitions = <InterfaceType, List<ClassElement>>{};
-
+    final processedClassNames = <String>{};
     final package = buildStep.inputId.package;
-    final glob = Glob("**/*.dart");
 
-    await for (final assetId in buildStep.findAssets(glob)) {
+    // 1. Scan local assets (files in lib/)
+    await _scanPackage(buildStep, package, definitions, processedClassNames,
+        isLocal: true);
+
+    // 2. Scan dependencies from pubspec.yaml
+    try {
+      final pubspecId = AssetId(package, "pubspec.yaml");
+      if (await buildStep.canRead(pubspecId)) {
+        final pubspecContent = await buildStep.readAsString(pubspecId);
+        final pubspec = loadYaml(pubspecContent);
+        if (pubspec is YamlMap) {
+          final dependencies = pubspec["dependencies"];
+          if (dependencies is YamlMap) {
+            for (final key in dependencies.keys) {
+              final depName = key.toString();
+              // Skip sdk dependencies and some common non-service packages
+              if (depName == "flutter" ||
+                  depName == "flutter_test" ||
+                  depName == "willshex_dart_service_discovery" ||
+                  depName == "meta") {
+                continue;
+              }
+              await _scanPackage(
+                  buildStep, depName, definitions, processedClassNames);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      log.warning("Failed to read or parse pubspec.yaml: $e");
+    }
+
+    // 3. Scan reachable libraries (imports)
+    try {
+      if (await buildStep.resolver.isLibrary(buildStep.inputId)) {
+        await for (final library in buildStep.resolver.libraries) {
+          if (library.isInSdk) continue; // Skip dart: libraries
+
+          final uri = Uri.parse(library.identifier);
+          if (uri.scheme == "package" &&
+              (uri.pathSegments.first == "flutter" ||
+                  uri.pathSegments.first == "flutter_test" ||
+                  uri.pathSegments.first == "dart_style" ||
+                  uri.pathSegments.first == "build_runner" ||
+                  uri.pathSegments.first == "source_gen")) {
+            continue;
+          }
+
+          _processLibrary(library, definitions, processedClassNames);
+        }
+      }
+    } catch (e) {
+      // failed to resolve libraries
+    }
+
+    return definitions;
+  }
+
+  Future<void> _scanPackage(
+    BuildStep buildStep,
+    String package,
+    Map<InterfaceType, List<ClassElement>> definitions,
+    Set<String> processedClassNames, {
+    bool isLocal = false,
+  }) async {
+    Stream<AssetId> assetStream;
+
+    if (isLocal) {
+      final glob = Glob("**/*.dart");
+      assetStream = buildStep.findAssets(glob);
+    } else {
+      try {
+        final uri = await Isolate.packageConfig;
+        if (uri == null) return;
+        final config = await loadPackageConfigUri(uri);
+
+        final pkg = config.packages.firstWhere(
+          (p) => p.name == package,
+          orElse: () => throw "Package $package not found",
+        );
+
+        final libPath = pkg.packageUriRoot.toFilePath();
+        final libDir = Directory(libPath);
+        if (!await libDir.exists()) return;
+
+        final files = libDir
+            .list(recursive: true)
+            .where((fs) => fs is File && fs.path.endsWith(".dart"));
+
+        assetStream = files.asyncMap((fs) async {
+          var basePath = libPath;
+          if (!basePath.endsWith(Platform.pathSeparator)) {
+            basePath += Platform.pathSeparator;
+          }
+
+          if (fs.path.startsWith(basePath)) {
+            final relative = fs.path.substring(basePath.length);
+            final assetPath =
+                "lib/${relative.replaceAll(Platform.pathSeparator, '/')}";
+            return AssetId(package, assetPath);
+          }
+          return AssetId(package, "lib/unknown.dart");
+        }).cast<AssetId>();
+      } catch (e) {
+        return;
+      }
+    }
+
+    await for (final assetId in assetStream) {
       if (assetId.package != package) continue;
 
-      // Skip generated files
       if (assetId.path.endsWith(".g.dart") ||
           assetId.path.endsWith(".svc.dart") ||
           assetId.path.endsWith(".freezed.dart")) {
         continue;
       }
 
-      // Filter based on scope
-      final inputPath = buildStep.inputId.path;
-      if (inputPath.startsWith("examples/")) {
-        final pathSegments = inputPath.split("/");
-        if (pathSegments.length >= 2) {
-          final exampleRoot = "${pathSegments[0]}/${pathSegments[1]}";
-          if (!assetId.path.startsWith("lib/") &&
-              !assetId.path.startsWith(exampleRoot)) {
+      if (isLocal) {
+        final inputPath = buildStep.inputId.path;
+        if (inputPath.startsWith("examples/")) {
+          final pathSegments = inputPath.split("/");
+          if (pathSegments.length >= 2) {
+            final exampleRoot = "${pathSegments[0]}/${pathSegments[1]}";
+            if (!assetId.path.startsWith("lib/") &&
+                !assetId.path.startsWith(exampleRoot)) {
+              continue;
+            }
+          }
+        } else {
+          if (!assetId.path.startsWith("lib/")) {
             continue;
           }
-        }
-      } else {
-        if (!assetId.path.startsWith("lib/")) {
-          continue;
         }
       }
 
       try {
         final library = await buildStep.resolver.libraryFor(assetId);
-
-        for (final cls in library.classes) {
-          if (cls.isAbstract) continue;
-
-          if (_inheritsFromService(cls)) {
-            final interfaces = _findServiceInterfaces(cls);
-            for (final interface in interfaces) {
-              definitions.putIfAbsent(interface, () => []).add(cls);
-            }
-          }
-        }
+        _processLibrary(library, definitions, processedClassNames);
       } catch (e) {
         continue;
       }
     }
-
-    return definitions;
   }
 
   List<InterfaceType> _findServiceInterfaces(ClassElement cls) {
@@ -188,5 +287,29 @@ class DiscoveryProviderGenerator extends GeneratorForAnnotation<Discovery> {
   String _toCamelCase(String str) {
     if (str.isEmpty) return str;
     return str[0].toLowerCase() + str.substring(1);
+  }
+
+  void _processLibrary(
+      LibraryElement library,
+      Map<InterfaceType, List<ClassElement>> definitions,
+      Set<String> processedClassNames) {
+    for (final cls in library.classes) {
+      if (cls.name == null) continue;
+      if (processedClassNames.contains(cls.name!)) continue;
+
+      // Skip abstract classes - they can't be instantiated
+      if (cls.isAbstract) continue;
+
+      // Skip private classes
+      if (cls.isPrivate) continue;
+
+      if (_inheritsFromService(cls)) {
+        processedClassNames.add(cls.name!);
+        final interfaces = _findServiceInterfaces(cls);
+        for (final interface in interfaces) {
+          definitions.putIfAbsent(interface, () => []).add(cls);
+        }
+      }
+    }
   }
 }

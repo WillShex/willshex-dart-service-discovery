@@ -1,0 +1,10 @@
+name: lib_ex7
+description: A library package with a service.
+version: 1.0.0
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  willshex_dart_service_discovery:
+    path: ../../../../
+  meta: ^1.7.0
