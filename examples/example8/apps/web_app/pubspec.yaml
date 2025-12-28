@@ -1,0 +1,11 @@
+name: web_app
+description: Web app consuming common and web_dep.
+environment:
+  sdk: ^3.0.0
+dependencies:
+  common:
+    path: ../../packages/common
+  web_dep:
+    path: ../../packages/web_dep
+  willshex_dart_service_discovery:
+    path: ../../../..

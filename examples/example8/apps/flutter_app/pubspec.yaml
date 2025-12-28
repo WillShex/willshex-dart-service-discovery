@@ -1,0 +1,11 @@
+name: flutter_app
+description: Flutter app consuming common and flutter_dep.
+environment:
+  sdk: ^3.0.0
+dependencies:
+  common:
+    path: ../../packages/common
+  flutter_dep:
+    path: ../../packages/flutter_dep
+  willshex_dart_service_discovery:
+    path: ../../../..

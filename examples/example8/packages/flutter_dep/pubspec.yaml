@@ -1,0 +1,9 @@
+name: flutter_dep
+description: Flutter dependency implementation.
+environment:
+  sdk: ^3.0.0
+dependencies:
+  common:
+    path: ../common
+  willshex_dart_service_discovery:
+    path: ../../../../

@@ -297,14 +297,24 @@ class DiscoveryProviderGenerator extends GeneratorForAnnotation<Discovery> {
       if (cls.name == null) continue;
       if (processedClassNames.contains(cls.name!)) continue;
 
-      // Skip abstract classes - they can't be instantiated
-      if (cls.isAbstract) continue;
-
       // Skip private classes
       if (cls.isPrivate) continue;
 
       if (_inheritsFromService(cls)) {
         processedClassNames.add(cls.name!);
+
+        if (cls.isAbstract) {
+          // For abstract services, we register them as keys so a getter is generated.
+          // We don't add any implementations to the list.
+          if (cls.name == "Service" || cls.name == "BasicService") {
+            if (_isServiceLibrary(cls)) {
+              continue;
+            }
+          }
+          definitions.putIfAbsent(cls.thisType, () => []);
+          continue;
+        }
+
         final interfaces = _findServiceInterfaces(cls);
         for (final interface in interfaces) {
           definitions.putIfAbsent(interface, () => []).add(cls);

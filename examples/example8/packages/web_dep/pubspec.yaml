@@ -1,0 +1,9 @@
+name: web_dep
+description: Web dependency implementation.
+environment:
+  sdk: ^3.0.0
+dependencies:
+  common:
+    path: ../common
+  willshex_dart_service_discovery:
+    path: ../../../../

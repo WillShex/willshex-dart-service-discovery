@@ -1,0 +1,11 @@
+name: common
+description: Common package with service interface and discovery config.
+environment:
+  sdk: ^3.0.0
+dependencies:
+  willshex_dart_service_discovery:
+    path: ../../../../
+  meta: ^1.7.0
+dev_dependencies:
+  build_runner: ^2.4.0
+  build: ^3.0.0
