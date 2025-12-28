@@ -1,4 +1,5 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
+// dart format width=80
 
 part of "main.dart";
 
@@ -16,8 +17,15 @@ class Registrar {
   }
 }
 
-class Provider {
+// **************************************************************************
+// DiscoveryProviderGenerator
+// **************************************************************************
+
+// ignore_for_file: non_constant_identifier_names
+
+abstract class Provider {
   Provider._();
+
   static AbstractService get abstractService =>
       ServiceDiscovery.instance.resolve<AbstractService>();
 }

@@ -41,7 +41,7 @@ class DiscoveryConfigGenerator
 
     // Filter out explicit concrete types from interface mappings
     // If an implementation is registered explicitly, it counts as "handled" and shouldn't
-    // contribute to the interface's ambiguity or singleton status (unless we want dual registration?)
+    // contribute to the interface's ambiguity or singleton status (unless we want dual registration?).
     // User request: "should NOT be generated ... valid if there was an ImplementationC...".
     // This implies we remove them from the interface's list.
 
@@ -137,6 +137,9 @@ class DiscoveryConfigGenerator
         final library = await buildStep.resolver.libraryFor(assetId);
 
         for (final cls in library.classes) {
+          // Skip abstract classes - they can't be instantiated
+          if (cls.isAbstract) continue;
+
           if (_inheritsFromService(cls)) {
             final interfaces = _findServiceInterfaces(cls);
             for (final interface in interfaces) {
@@ -209,7 +212,7 @@ class DiscoveryConfigGenerator
       String className,
       Map<InterfaceType, List<ClassElement>> services,
       List<ClassElement> explicitConcreteTypes) {
-    buffer.writeln("class $className {");
+    buffer.writeln("abstract class $className {");
     buffer.writeln("  $className._();");
     _generateInitBody(buffer, services, explicitConcreteTypes);
     _generateGettersBody(buffer, services, explicitConcreteTypes);

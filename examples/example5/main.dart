@@ -5,7 +5,6 @@ import "services/service_b.dart";
 part "main.svc.dart";
 
 @ConfigureDiscovery(
-  provider: "Provider",
   registrar: "Registrar",
 )
 void main() async {

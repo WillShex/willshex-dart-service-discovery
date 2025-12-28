@@ -4,10 +4,10 @@ import "services/principal_service.dart";
 
 part "main.svc.dart";
 
-@ConfigureDiscovery(
-  provider: "Provider",
-  registrar: "Registrar",
-)
+@Discovery()
+abstract class Trigger {}
+
+@ConfigureDiscovery()
 void main() async {
   // PrincipalService depends on DependentService.
   // We expect DependentService to be registered/initialized FIRST.

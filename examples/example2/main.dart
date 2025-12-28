@@ -5,12 +5,13 @@ import "services/implementation_a.dart";
 
 part "main.svc.dart";
 
+@Discovery()
+abstract class Trigger {}
+
 @ConfigureDiscovery(
-  provider: "Provider",
-  registrar: "Registrar",
-  // No explicit registration here.
-  // This example demonstrates Ambiguity Resolution via Injection.
-)
+    // No explicit registration here.
+    // This example demonstrates Ambiguity Resolution via Injection.
+    )
 void main() async {
   // AbstractService has 2 impls (A, B).
   // init() requires us to pass one.
