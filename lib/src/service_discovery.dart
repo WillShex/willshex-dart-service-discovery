@@ -77,9 +77,13 @@ class ServiceDiscovery {
   /// and the exception is rethrown.
   Future<void> init({
     void Function(Service service, String key)? onProgress,
+    void Function(Type type)? onChange,
   }) async {
     for (final entry in _services.entries) {
       onProgress?.call(entry.value, entry.key.toString());
+      if (entry.key is Type) {
+        onChange?.call(entry.key as Type);
+      }
       await entry.value.init();
     }
   }

@@ -81,6 +81,27 @@ void main() {
           progressTypes, orderedEquals(["MockService", "AnotherMockService"]));
     });
 
+    test("should report type change during initialization", () async {
+      final service1 = MockService();
+      final service2 = AnotherMockService();
+
+      ServiceDiscovery.instance.register<MockService>(service1);
+      ServiceDiscovery.instance.register<AnotherMockService>(service2);
+
+      final changeTypes = <Type>[];
+
+      when(service1.init()).thenReturn(null);
+      when(service2.init()).thenReturn(null);
+
+      await ServiceDiscovery.instance.init(
+        onChange: (type) {
+          changeTypes.add(type);
+        },
+      );
+
+      expect(changeTypes, orderedEquals([MockService, AnotherMockService]));
+    });
+
     test("should stop initialization on failure", () async {
       final service1 = MockService();
       final service2 = AnotherMockService();
