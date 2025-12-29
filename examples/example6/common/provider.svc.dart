@@ -4,7 +4,7 @@
 part of "provider.dart";
 
 // **************************************************************************
-// DiscoveryProviderGenerator
+// ProviderGenerator
 // **************************************************************************
 
 // ignore_for_file: non_constant_identifier_names

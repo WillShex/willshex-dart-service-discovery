@@ -8,16 +8,16 @@ import "package:build/build.dart";
 import "package:glob/glob.dart";
 import "package:package_config/package_config.dart";
 import "package:source_gen/source_gen.dart";
-import "package:willshex_dart_service_discovery/src/annotations/configure_discovery.dart";
+import "package:willshex_dart_service_discovery/src/annotations/discovery_provider.dart";
 import "package:yaml/yaml.dart";
 
-/// Generates provider methods for classes annotated with @Discovery.
+/// Generates provider methods for classes annotated with @Provider.
 ///
 /// This generator creates static getters for all discovered services,
 /// allowing the Provider class to be in a common/shared package while
 /// the Registrar remains in platform-specific code.
-class DiscoveryProviderGenerator extends GeneratorForAnnotation<Discovery> {
-  const DiscoveryProviderGenerator();
+class ProviderGenerator extends GeneratorForAnnotation<DiscoveryProvider> {
+  const ProviderGenerator();
 
   @override
   Future<String> generateForAnnotatedElement(
@@ -27,7 +27,7 @@ class DiscoveryProviderGenerator extends GeneratorForAnnotation<Discovery> {
   ) async {
     if (element is! ClassElement) {
       throw InvalidGenerationSourceError(
-        "@Discovery can only be applied to classes",
+        "@Provider can only be applied to classes",
         element: element,
       );
     }

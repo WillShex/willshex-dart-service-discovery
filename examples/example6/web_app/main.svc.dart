@@ -4,15 +4,18 @@
 part of "main.dart";
 
 // **************************************************************************
-// DiscoveryConfigGenerator
+// RegistrarGenerator
 // **************************************************************************
 
 class Registrar {
   Registrar._();
   static Future<void> init({
     required LoggingService loggingService,
+    void Function(Type type)? onChange,
   }) async {
     ServiceDiscovery.instance.register<LoggingService>(loggingService);
-    await ServiceDiscovery.instance.init();
+    await ServiceDiscovery.instance.init(
+      onChange: onChange,
+    );
   }
 }

@@ -5,7 +5,7 @@ import "services/implementation_b.dart";
 
 part "main.svc.dart";
 
-@Discovery(
+@DiscoveryProvider(
   concrete: [
     ImplementationA,
     ImplementationB,
@@ -13,7 +13,7 @@ part "main.svc.dart";
 )
 abstract class Trigger {}
 
-@ConfigureDiscovery(
+@DiscoveryRegistrar(
   // Scenario 3: Multiple Concrete Registration
   // Register specific implementations by their concrete type
   // This allows direct access to ImplementationA and ImplementationB

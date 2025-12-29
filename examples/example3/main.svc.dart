@@ -4,20 +4,24 @@
 part of "main.dart";
 
 // **************************************************************************
-// DiscoveryConfigGenerator
+// RegistrarGenerator
 // **************************************************************************
 
 class Registrar {
   Registrar._();
-  static Future<void> init() async {
+  static Future<void> init({
+    void Function(Type type)? onChange,
+  }) async {
     ServiceDiscovery.instance.register<ImplementationA>(ImplementationA());
     ServiceDiscovery.instance.register<ImplementationB>(ImplementationB());
-    await ServiceDiscovery.instance.init();
+    await ServiceDiscovery.instance.init(
+      onChange: onChange,
+    );
   }
 }
 
 // **************************************************************************
-// DiscoveryProviderGenerator
+// ProviderGenerator
 // **************************************************************************
 
 // ignore_for_file: non_constant_identifier_names

@@ -4,8 +4,8 @@ import "services/service_b.dart";
 
 part "main.svc.dart";
 
-@ConfigureDiscovery(
-  registrar: "Registrar",
+@DiscoveryRegistrar(
+  name: "Registrar",
 )
 void main() async {
   // Circular Dependency A <-> B

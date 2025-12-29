@@ -1,20 +1,19 @@
 import "dart:async";
+import "dart:io";
+import "dart:isolate";
 
 import "package:analyzer/dart/element/element.dart";
 import "package:analyzer/dart/element/type.dart";
 import "package:build/build.dart";
 import "package:glob/glob.dart";
-import "package:source_gen/source_gen.dart";
-import "package:willshex_dart_service_discovery/src/annotations/configure_discovery.dart";
-import "package:yaml/yaml.dart";
 import "package:package_config/package_config.dart";
-import "dart:io";
-import "dart:isolate";
+import "package:source_gen/source_gen.dart";
+import "package:willshex_dart_service_discovery/src/annotations/discovery_registrar.dart";
+import "package:yaml/yaml.dart";
 
 /// Generates the configuration method to register all services.
-class DiscoveryConfigGenerator
-    extends GeneratorForAnnotation<ConfigureDiscovery> {
-  const DiscoveryConfigGenerator();
+class RegistrarGenerator extends GeneratorForAnnotation<DiscoveryRegistrar> {
+  const RegistrarGenerator();
 
   @override
   Future<String> generateForAnnotatedElement(
@@ -27,8 +26,7 @@ class DiscoveryConfigGenerator
         await _scanForServices(buildStep, element);
 
     // 2. Read Annotation
-    final providerName = annotation.peek("provider")?.stringValue;
-    final registrarName = annotation.peek("registrar")?.stringValue;
+    final registrarName = annotation.peek("name")?.stringValue ?? "Registrar";
 
     // Read explicit concrete types
     final concreteTypes = <ClassElement>[];
@@ -41,19 +39,20 @@ class DiscoveryConfigGenerator
         }
       }
     }
+    log.info(
+        "Explicit concrete types: ${concreteTypes.map((e) => e.name).toList()}");
 
     // Filter out explicit concrete types from interface mappings
-    // If an implementation is registered explicitly, it counts as "handled" and shouldn't
-    // contribute to the interface's ambiguity or singleton status (unless we want dual registration?).
-    // User request: "should NOT be generated ... valid if there was an ImplementationC...".
-    // This implies we remove them from the interface's list.
-
     final filteredInterfaceToImplementations =
         <InterfaceType, List<ClassElement>>{};
     interfaceToImplementations.forEach((interface, impls) {
+      log.info(
+          "Interface ${interface.element.name} has impls: ${impls.map((e) => e.name).toList()}");
       final remaining = impls
           .where((impl) => !concreteTypes.any((c) => c.name == impl.name))
           .toList();
+      log.info(
+          "Interface ${interface.element.name} remaining: ${remaining.map((e) => e.name).toList()}");
       if (remaining.isNotEmpty) {
         filteredInterfaceToImplementations[interface] = remaining;
       }
@@ -62,36 +61,9 @@ class DiscoveryConfigGenerator
     // 3. Generate Code
     final buffer = StringBuffer();
 
-    if (element is ExecutableElement) {
-      if (providerName != null &&
-          registrarName != null &&
-          providerName == registrarName) {
-        // Unified Class
-        _generateUnifiedClass(buffer, providerName,
-            filteredInterfaceToImplementations, concreteTypes);
-      } else {
-        // Split or Individual Classes
-        // Registrar: responsible for initialization/registration
-        if (registrarName != null) {
-          _generateRegistrarClass(buffer, registrarName,
-              filteredInterfaceToImplementations, concreteTypes);
-        }
-        // Provider: responsible for access/getters
-        if (providerName != null) {
-          _generateProviderClass(buffer, providerName,
-              filteredInterfaceToImplementations, concreteTypes);
-        }
-
-        if (providerName == null && registrarName == null) {
-          _generateFunctionBody(
-              buffer, filteredInterfaceToImplementations, concreteTypes);
-        }
-      }
-    } else if (element is ClassElement) {
-      // New Class/Extension support
-      _generateClassExtension(
-          buffer, element, filteredInterfaceToImplementations, concreteTypes);
-    }
+    // Registrar: responsible for initialization/registration
+    _generateRegistrarClass(buffer, registrarName,
+        filteredInterfaceToImplementations, concreteTypes);
 
     return buffer.toString();
   }
@@ -298,30 +270,6 @@ class DiscoveryConfigGenerator
     return interfaces;
   }
 
-  void _generateFunctionBody(
-      StringBuffer buffer,
-      Map<InterfaceType, List<ClassElement>> services,
-      List<ClassElement> explicitConcreteTypes) {
-    buffer.write("Future<void> \$configureDiscovery(");
-    _generateInitParams(buffer, services);
-    buffer.writeln(") async {");
-    _generateRegistrationCalls(buffer, services, explicitConcreteTypes);
-    buffer.writeln("  await ServiceDiscovery.instance.init();");
-    buffer.writeln("}");
-  }
-
-  void _generateUnifiedClass(
-      StringBuffer buffer,
-      String className,
-      Map<InterfaceType, List<ClassElement>> services,
-      List<ClassElement> explicitConcreteTypes) {
-    buffer.writeln("abstract class $className {");
-    buffer.writeln("  $className._();");
-    _generateInitBody(buffer, services, explicitConcreteTypes);
-    _generateGettersBody(buffer, services, explicitConcreteTypes);
-    buffer.writeln("}");
-  }
-
   void _generateRegistrarClass(
       StringBuffer buffer,
       String className,
@@ -333,26 +281,17 @@ class DiscoveryConfigGenerator
     buffer.writeln("}");
   }
 
-  void _generateProviderClass(
-      StringBuffer buffer,
-      String className,
-      Map<InterfaceType, List<ClassElement>> services,
-      List<ClassElement> explicitConcreteTypes) {
-    buffer.writeln("class $className {");
-    buffer.writeln("  $className._();");
-    _generateGettersBody(buffer, services, explicitConcreteTypes);
-    buffer.writeln("}");
-  }
-
   void _generateInitBody(
       StringBuffer buffer,
       Map<InterfaceType, List<ClassElement>> services,
       List<ClassElement> explicitConcreteTypes) {
-    buffer.write("  static Future<void> init(");
+    buffer.write("  static Future<void> init({");
     _generateInitParams(buffer, services);
-    buffer.writeln(") async {");
+    buffer.writeln("void Function(Type type)? onChange,}) async {");
     _generateRegistrationCalls(buffer, services, explicitConcreteTypes);
-    buffer.writeln("    await ServiceDiscovery.instance.init();");
+    buffer.writeln("    await ServiceDiscovery.instance.init(");
+    buffer.writeln("      onChange: onChange,");
+    buffer.writeln("    );");
     buffer.writeln("  }");
   }
 
@@ -369,59 +308,13 @@ class DiscoveryConfigGenerator
 
     // Add them as named parameters
     if (ambiguousInterfaces.isNotEmpty) {
-      buffer.write("{");
       ambiguousInterfaces.sort(
           (a, b) => (a.element.name ?? "").compareTo(b.element.name ?? ""));
       for (final interface in ambiguousInterfaces) {
         final paramName = _toCamelCase(interface.element.name!);
         buffer.write("required ${interface.element.name} $paramName, ");
       }
-      buffer.write("}");
     }
-  }
-
-  void _generateGettersBody(
-      StringBuffer buffer,
-      Map<InterfaceType, List<ClassElement>> services,
-      List<ClassElement> explicitConcreteTypes) {
-    final allInterfaces = services.keys.toSet();
-
-    // Add explicit concrete types as if they are interfaces (they are their own interface)
-    final explicitMap = <String, ClassElement>{};
-    for (final concrete in explicitConcreteTypes) {
-      explicitMap[concrete.name!] = concrete;
-    }
-
-    final sortedInterfaces = allInterfaces.toList()
-      ..sort((a, b) => (a.element.name ?? "").compareTo(b.element.name ?? ""));
-
-    final sortedExplicit = explicitMap.values.toList()
-      ..sort((a, b) => (a.name ?? "").compareTo(b.name ?? ""));
-
-    // Desired: Getters for all interfaces (auto-discovered)
-    for (final interface in sortedInterfaces) {
-      final instanceName = _toCamelCase(interface.element.name!);
-      buffer.writeln(
-          "  static ${interface.element.name!} get $instanceName => ServiceDiscovery.instance.resolve<${interface.element.name!}>();");
-    }
-
-    // AND Getters for explicit concrete types
-    for (final concrete in sortedExplicit) {
-      final instanceName = _toCamelCase(concrete.name!);
-      buffer.writeln(
-          "  static ${concrete.name!} get $instanceName => ServiceDiscovery.instance.resolve<${concrete.name!}>();");
-    }
-  }
-
-  void _generateClassExtension(
-      StringBuffer buffer,
-      ClassElement cls,
-      Map<InterfaceType, List<ClassElement>> services,
-      List<ClassElement> explicitConcreteTypes) {
-    buffer.writeln("extension ${cls.name}Discovery on ${cls.name} {");
-    _generateInitBody(buffer, services, explicitConcreteTypes);
-    _generateGettersBody(buffer, services, explicitConcreteTypes);
-    buffer.writeln("}");
   }
 
   void _generateRegistrationCalls(

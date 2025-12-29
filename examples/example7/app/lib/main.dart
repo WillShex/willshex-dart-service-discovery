@@ -4,10 +4,10 @@ import "package:willshex_dart_service_discovery/willshex_dart_service_discovery.
 
 part "main.svc.dart";
 
-@Discovery()
+@DiscoveryProvider()
 abstract class Trigger {}
 
-@ConfigureDiscovery()
+@DiscoveryRegistrar()
 void main() async {
   await Registrar.init();
   print(Provider.libService);

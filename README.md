@@ -1,6 +1,6 @@
 # willshex_dart_service_discovery
 
-A generic service discovery registry for Dart applications.
+A generic service discovery registry for Dart applications, supporting dependency injection, topological initialization reporting, and multi-platform shared providers.
 
 ## Getting Started
 
@@ -10,18 +10,25 @@ Add the dependency to your `pubspec.yaml`:
 dependencies:
   willshex_dart_service_discovery:
     path: packages/willshex_dart_service_discovery
+  
+dev_dependencies:
+  build_runner: ^2.4.0
 ```
 
 ## Usage
 
-### 1. Define a Service
+### 1. Define Services
 
-Implement the `Service` abstract class for your services.
+You have two options for defining services: extending `BasicService` (recommended) or implementing `Service` directly.
+
+#### A. Extend `BasicService` (Recommended)
+
+`BasicService` handles initialization state tracking (`isInitialized`) and provides a `verifyInitialized()` helper. You only need to implement `onInit` and `onReset`.
 
 ```dart
 import 'package:willshex_dart_service_discovery/willshex_dart_service_discovery.dart';
 
-class MyService extends Service {
+class MyService extends BasicService {
   @override
   Future<void> onInit() async {
     // Initialization logic
@@ -33,116 +40,115 @@ class MyService extends Service {
   }
 
   void doSomething() {
-    verifyInitialized();
+    verifyInitialized(); // Throws if not initialized
     // Service logic
   }
 }
 ```
 
-### 2. Register Services
+#### B. Implement `Service` (Advanced)
 
-Register your service instances with the `ServiceDiscovery` singleton. You can register by type.
-
-```dart
-// Register usage
-ServiceDiscovery.instance.register<MyService>(MyService());
-```
-
-### 3. Initialize Services
-
-Initialize all registered services in order. This is typically done at app startup.
+If you need full control over initialization logic or state, implement the `Service` interface directly. You must manage your own state.
 
 ```dart
-await ServiceDiscovery.instance.init(
-  onProgress: (service, key) {
-    print('Initializing $key...');
-  },
-);
+class MyCustomService implements Service {
+  @override
+  Future<void> init() async {
+    // Custom initialization
+  }
+
+  @override
+  Future<void> reset() async {
+    // Custom reset
+  }
+}
 ```
 
-### 4. Resolve Services
+### 2. Configure Service Discovery
 
-Retrieve your registered services anywhere in your application.
+Use annotations to generate the service registry and provider accessors.
+
+#### `@DiscoveryProvider`
+
+Generates a `Provider` class with static getters for your services. This allows type-safe, easy access to registered services.
 
 ```dart
-// Resolve by Type
-final myService = ServiceDiscovery.instance.resolve<MyService>();
+// provider.dart (or in main.dart)
+import 'package:willshex_dart_service_discovery/willshex_dart_service_discovery.dart';
 
-// Resolve by Name
-final namedService = ServiceDiscovery.instance.resolve<MyService>(name: 'my_service_alias');
+part 'provider.svc.dart';
+
+@DiscoveryProvider()
+abstract class Trigger {} 
+// Generates "class Provider { ... }"
 ```
 
-### 5. Use ServiceProvider (Helper)
+#### `@DiscoveryRegistrar`
 
-Use the `ServiceProvider` class for easy access to services.
+Generates a `Registrar` class responsible for initializing and registering services. It handles dependency resolution and topological sorting.
 
 ```dart
-// Define a provider
-const myServiceProvider = ServiceProvider<MyService>();
+// main.dart
+import 'package:willshex_dart_service_discovery/willshex_dart_service_discovery.dart';
 
-// Access the service
-myServiceProvider.service.doSomething();
+part 'main.svc.dart';
+
+@DiscoveryRegistrar()
+void main() async {
+  // Initialize services
+  await Registrar.init(
+    onChange: (type) => print('Initializing $type...'),
+  );
+
+  // Access services
+  final service = Provider.myService;
+}
 ```
 
-### 6. Reset Services
+### 3. Run Build Runner
 
-You can trigger a reset on all registered services, for example, during logout.
-
-```dart
-await ServiceDiscovery.instance.reset();
+```bash
+dart run build_runner build
 ```
 
+---
 
+## Examples
 
-### 7. Code Generation (Optional)
+The `examples/` directory contains various scenarios demonstrating the capabilities of the package.
 
-You can maintain a simple registry of your services using `build_runner`.
+### Example 1: Basic Usage
+Demonstrates the simplest setup: defining a service, triggering generation, and accessing it via `Provider`.
 
-#### 7.1 Setup
+### Example 2: Ambiguity Resolution (Injection)
+Shows how to handle interfaces with multiple implementations.
+- `AbstractService` has `ImplementationA` and `ImplementationB`.
+- `Registrar.init` generates named parameters to let you inject the desired implementation at runtime (e.g., `await Registrar.init(abstractService: ImplementationA())`).
 
-Add `build_runner` to your `dev_dependencies` and the package to `dependencies`.
+### Example 3: Multiple Concrete Registration
+Shows how to register multiple implementations of the same interface so they can be accessed distinctively.
+- Uses `@DiscoveryRegistrar(concrete: [ImplementationA, ImplementationB])` to ensure both are available via `Provider.implementationA` and `Provider.implementationB`.
 
-#### 7.2 Usage
+### Example 4: Dependency Injection & Ordering
+Demonstrates automatic dependency resolution.
+- `PrincipalService` depends on `DependentService` (via `@DependsOn`).
+- The `Registrar` automatically initializes `DependentService` before `PrincipalService`.
 
-1.  **Define Services**: Create your services extending `Service`. To generate a `ServiceProvider` for easier access, add a `part` directive.
+### Example 5: Circular Dependency
+Demonstrates that the generator detects circular dependencies (A->B->A) and fails the build with a descriptive error, preventing runtime deadlocks.
 
-    ```dart
-    // my_service.dart
-    import 'package:willshex_dart_service_discovery/willshex_dart_service_discovery.dart';
+### Example 6: Multi-Platform (Flutter + Web)
+A complete example of a monorepo structure sharing common business logic while using platform-specific service implementations.
 
-    part 'my_service.svc.dart';
+**Structure:**
+- **Common**: `LoggingService` interface and `@DiscoveryProvider` (generated `Provider`).
+- **Flutter App**: `FileLoggingService` implementation and `@DiscoveryRegistrar`.
+- **Web App**: `ConsoleLoggingService` implementation and `@DiscoveryRegistrar`.
 
-    class MyService extends Service {
-      // ...
-    }
-    ```
+**Key Concept**: The `Provider` is generated in the common package, allowing shared code to access `Provider.loggingService` without knowing if it's running on Flutter or Web. The platform-specific entry point registers the correct implementation.
 
-2.  **Configure Discovery**: In your entry point (e.g., `main.dart` or `config.dart`), add the `@ConfigureDiscovery` annotation and the `part` directive.
+### Example 7: Cross-Package Discovery
+Demonstrates finding and registering services declared in imported packages (`lib_ex7`, `lib_ex7_1`). The generator scans dependencies to ensure all available services are discoverable.
 
-    ```dart
-    import 'package:willshex_dart_service_discovery/willshex_dart_service_discovery.dart';
-    // Import your services so they can be referenced
-    import 'services/my_service.dart'; 
-
-    part 'main.svc.dart';
-
-    @ConfigureDiscovery()
-    void configure() => $configureDiscovery();
-
-    void main() async {
-      await configure();
-      // ServiceDiscovery.instance.init() is called automatically by configure()
-      // ...
-    }
-    ```
-
-3.  **Run Builder**:
-
-    ```bash
-    dart run build_runner build
-    ```
-
-    *   `main.svc.dart` will be generated with the `$configureDiscovery` function registering and initializing all found services.
-    *   `my_service.svc.dart` will be generated containing configuration `MyServiceProvider`.
-
-
+### Example 8: Monorepo & Business Logic
+Similar to Example 6 but focuses on sharing a complex `CommonBusiness` logic component that relies on the injected services.

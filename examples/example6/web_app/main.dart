@@ -9,7 +9,7 @@ part "main.svc.dart";
 ///
 /// Uses ambiguity resolution to inject ConsoleLoggingService.
 /// The Provider is imported from common code.
-@ConfigureDiscovery()
+@DiscoveryRegistrar()
 void main() async {
   print("=== Jaspr Web App ===");
   await Registrar.init(loggingService: ConsoleLoggingService());

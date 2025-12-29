@@ -4,13 +4,16 @@
 part of "main.dart";
 
 // **************************************************************************
-// DiscoveryConfigGenerator
+// RegistrarGenerator
 // **************************************************************************
 
 class Registrar {
   Registrar._();
-  static Future<void> init() async {
-    ServiceDiscovery.instance.register<SharedService>(WebServiceImpl());
-    await ServiceDiscovery.instance.init();
+  static Future<void> init({
+    void Function(Type type)? onChange,
+  }) async {
+    await ServiceDiscovery.instance.init(
+      onChange: onChange,
+    );
   }
 }

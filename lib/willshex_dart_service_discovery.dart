@@ -1,7 +1,7 @@
 library;
 
-export "src/annotations/configure_discovery.dart"
-    show ConfigureDiscovery, Discovery;
+export "src/annotations/discovery_provider.dart";
+export "src/annotations/discovery_registrar.dart";
 export "src/annotations/depends_on.dart";
 export "src/basic_service.dart";
 export "src/service.dart";

@@ -5,10 +5,10 @@ import "services/implementation_a.dart";
 
 part "main.svc.dart";
 
-@Discovery()
+@DiscoveryProvider()
 abstract class Trigger {}
 
-@ConfigureDiscovery(
+@DiscoveryRegistrar(
     // No explicit registration here.
     // This example demonstrates Ambiguity Resolution via Injection.
     )

@@ -5,10 +5,10 @@ import "services/example_service.dart";
 
 part "main.svc.dart";
 
-@Discovery()
+@DiscoveryProvider()
 abstract class Trigger {}
 
-@ConfigureDiscovery()
+@DiscoveryRegistrar()
 void main(List<String> args) async {
   await Registrar.init();
   print("Service Discovery Configured and Initialized");

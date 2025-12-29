@@ -9,7 +9,7 @@ part "main.svc.dart";
 ///
 /// Uses ambiguity resolution to inject FileLoggingService.
 /// The Provider is imported from common code.
-@ConfigureDiscovery()
+@DiscoveryRegistrar()
 void main() async {
   print("=== Flutter App ===");
   await Registrar.init(loggingService: FileLoggingService());

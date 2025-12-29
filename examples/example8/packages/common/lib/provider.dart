@@ -3,5 +3,5 @@ import "package:willshex_dart_service_discovery/willshex_dart_service_discovery.
 
 part "provider.svc.dart";
 
-@Discovery()
+@DiscoveryProvider()
 abstract class Trigger {}
