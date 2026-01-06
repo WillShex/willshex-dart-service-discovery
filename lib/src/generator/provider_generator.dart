@@ -251,6 +251,8 @@ class ProviderGenerator extends GeneratorForAnnotation<DiscoveryProvider> {
     final sortedInterfaces = allInterfaces.toList()
       ..sort((a, b) => (a.element.name ?? "").compareTo(b.element.name ?? ""));
 
+    final generatedNames = <String>{};
+
     for (final interface in sortedInterfaces) {
       final implementations = services[interface] ?? [];
       final hasConcreteImplementation = implementations.any((impl) =>
@@ -262,7 +264,36 @@ class ProviderGenerator extends GeneratorForAnnotation<DiscoveryProvider> {
         continue;
       }
 
+      if (interface.element is ClassElement &&
+          (interface.element as ClassElement).isAbstract) {
+        final hasConcreteChildKey = allInterfaces.any((other) {
+          if (other == interface) {
+            return false;
+          }
+
+          if (other.element is ClassElement &&
+              !(other.element as ClassElement).isAbstract) {
+            final otherClass = other.element as ClassElement;
+            return otherClass.allSupertypes.any((s) =>
+                s.element.name == interface.element.name &&
+                s.element.library.identifier ==
+                    interface.element.library.identifier);
+          }
+
+          return false;
+        });
+
+        if (hasConcreteChildKey) {
+          continue;
+        }
+      }
+
       final instanceName = _toCamelCase(interface.element.name!);
+      if (generatedNames.contains(instanceName)) {
+        continue;
+      }
+      generatedNames.add(instanceName);
+
       buffer.writeln(
           "  static ${interface.element.name!} get $instanceName => ServiceDiscovery.instance.resolve<${interface.element.name!}>();");
     }
@@ -273,6 +304,12 @@ class ProviderGenerator extends GeneratorForAnnotation<DiscoveryProvider> {
 
     for (final concrete in sortedConcrete) {
       final instanceName = _toCamelCase(concrete.name!);
+      if (generatedNames.contains(instanceName)) {
+        continue;
+      }
+
+      generatedNames.add(instanceName);
+
       buffer.writeln(
           "  static ${concrete.name!} get $instanceName => ServiceDiscovery.instance.resolve<${concrete.name!}>();");
     }
