@@ -442,19 +442,29 @@ class RegistrarGenerator extends GeneratorForAnnotation<DiscoveryRegistrar> {
     final typeChecker = TypeChecker.fromUrl(
         "package:willshex_dart_service_discovery/src/annotations/depends_on.dart#DependsOn");
 
-    final annotation = typeChecker.firstAnnotationOf(cls);
-    if (annotation != null) {
-      final reader = ConstantReader(annotation);
-      final list = reader.peek("dependencies")?.listValue;
-      if (list != null) {
-        for (final item in list) {
-          final type = item.toTypeValue();
-          if (type is InterfaceType) {
-            deps.add(type);
+    void checkElement(Element element) {
+      final annotation = typeChecker.firstAnnotationOf(element);
+      if (annotation != null) {
+        final reader = ConstantReader(annotation);
+        final list = reader.peek("dependencies")?.listValue;
+        if (list != null) {
+          for (final item in list) {
+            final type = item.toTypeValue();
+            if (type is InterfaceType) {
+              deps.add(type);
+            }
           }
         }
       }
     }
+
+    checkElement(cls);
+    for (final supertype in cls.allSupertypes) {
+      if (supertype.element is ClassElement && !supertype.isDartCoreObject) {
+        checkElement(supertype.element);
+      }
+    }
+
     return deps.toSet();
   }
 

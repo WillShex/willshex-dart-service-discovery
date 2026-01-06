@@ -252,6 +252,16 @@ class ProviderGenerator extends GeneratorForAnnotation<DiscoveryProvider> {
       ..sort((a, b) => (a.element.name ?? "").compareTo(b.element.name ?? ""));
 
     for (final interface in sortedInterfaces) {
+      final implementations = services[interface] ?? [];
+      final hasConcreteImplementation = implementations.any((impl) =>
+          concreteTypes.any((c) =>
+              c.name == impl.name &&
+              c.library.identifier == impl.library.identifier));
+
+      if (hasConcreteImplementation) {
+        continue;
+      }
+
       final instanceName = _toCamelCase(interface.element.name!);
       buffer.writeln(
           "  static ${interface.element.name!} get $instanceName => ServiceDiscovery.instance.resolve<${interface.element.name!}>();");
