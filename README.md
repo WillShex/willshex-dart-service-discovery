@@ -113,7 +113,17 @@ dart run build_runner build
 
 ---
 
+
+### 3. Advanced Features
+
+#### Inherited Dependencies
+Dependencies declared via `@DependsOn` are inherited. If `AbstractService` depends on `DatabaseService`, all concrete implementations of `AbstractService` will also automatically depend on `DatabaseService` and wait for it to initialize.
+
+#### Abstract Provider Suppression
+If you register a concrete implementation of an abstract service (e.g., `ConcreteService extends AbstractService`), the generator will suppress the getter for `AbstractService` in the `Provider` to keep the API clean. You will access it via `Provider.concreteService` instead.
+
 ## Examples
+
 
 The `examples/` directory contains various scenarios demonstrating the capabilities of the package.
 
@@ -152,3 +162,8 @@ Demonstrates finding and registering services declared in imported packages (`li
 
 ### Example 8: Monorepo & Business Logic
 Similar to Example 6 but focuses on sharing a complex `CommonBusiness` logic component that relies on the injected services.
+
+### Example 9: Abstract Suppression & Inheritance
+Demonstrates advanced generator features:
+- **Inheritance**: `AbstractService` declares `@DependsOn([ServiceX])`. `C1Service` (child) respects this dependency and initializes after `ServiceX`.
+- **Suppression**: `Provider` only generates getters for `c1Service` and `c2Service`, omitting `abstractService` because concrete implementations are present.
