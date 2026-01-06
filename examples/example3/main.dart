@@ -1,5 +1,4 @@
 import "package:willshex_dart_service_discovery/willshex_dart_service_discovery.dart";
-import "services/abstract_service.dart";
 import "services/implementation_a.dart";
 import "services/implementation_b.dart";
 

@@ -29,8 +29,6 @@ class Registrar {
 abstract class Provider {
   Provider._();
 
-  static AbstractService get abstractService =>
-      ServiceDiscovery.instance.resolve<AbstractService>();
   static ImplementationA get implementationA =>
       ServiceDiscovery.instance.resolve<ImplementationA>();
   static ImplementationB get implementationB =>
