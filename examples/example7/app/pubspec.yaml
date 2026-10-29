@@ -3,6 +3,7 @@ description: An app consuming the library package.
 version: 1.0.0
 environment:
   sdk: '>=3.0.0 <4.0.0'
+publish_to: none
 
 dependencies:
   lib_ex7:
